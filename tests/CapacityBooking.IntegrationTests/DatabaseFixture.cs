@@ -70,7 +70,7 @@ public sealed class DatabaseFixture : IAsyncLifetime
     public async Task ResetAsync()
     {
         Observer.Reset();
-        await ExecuteAsync("TRUNCATE TABLE audit_transitions, booking_confirmations, inbox, outbox, idempotency_records, capacity_holds, bookings, voyage_capacity RESTART IDENTITY CASCADE");
+        await ExecuteAsync("TRUNCATE TABLE outbox_admin_requests, audit_transitions, booking_confirmations, inbox, outbox, idempotency_records, capacity_holds, bookings, voyage_capacity RESTART IDENTITY CASCADE");
     }
 
     public async Task DisposeAsync()

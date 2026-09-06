@@ -30,6 +30,7 @@ public interface IBookingService
 public interface IExpiryService
 {
     Task<int> ExpireDueAsync(int batchSize = 100, CancellationToken ct = default);
+    Task<ExpirySweepResult> SweepDueAsync(ExpirySweepState state, int batchSize = 100, CancellationToken ct = default);
     Task<bool> ExpireAsync(Guid holdId, CancellationToken ct = default);
 }
 
@@ -72,4 +73,5 @@ public sealed class DeliveryOptions
     public TimeSpan LeaseDuration { get; set; } = TimeSpan.FromSeconds(30);
     public TimeSpan RetryBaseDelay { get; set; } = TimeSpan.FromSeconds(1);
     public TimeSpan MaxRetryDelay { get; set; } = TimeSpan.FromMinutes(1);
+    public int MaxFailuresPerCycle { get; set; } = 20;
 }

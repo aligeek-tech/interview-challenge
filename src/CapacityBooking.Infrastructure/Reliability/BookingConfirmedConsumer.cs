@@ -15,10 +15,7 @@ public sealed class BookingConfirmedConsumer(
 
     public async Task<bool> ConsumeAsync(BookingConfirmedMessage message, CancellationToken ct = default)
     {
-        ArgumentNullException.ThrowIfNull(message);
-        if (message.SchemaVersion != 1 || message.MessageId == Guid.Empty || message.HoldId == Guid.Empty ||
-            message.Quantity <= 0 || string.IsNullOrWhiteSpace(message.BookingId) || string.IsNullOrWhiteSpace(message.VoyageId))
-            throw new InvalidOperationException("Unsupported or invalid BookingConfirmed message.");
+        BookingConfirmedValidation.Validate(message);
 
         await using var connection = await database.OpenAsync(ct);
         await using var transaction = await connection.BeginTransactionAsync(IsolationLevel.ReadCommitted, ct);

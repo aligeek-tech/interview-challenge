@@ -3,16 +3,25 @@ using System.Text.Json;
 using CapacityBooking.Application;
 using CapacityBooking.Infrastructure;
 using CapacityBooking.Infrastructure.Reliability;
-using Dapper;
 using Npgsql;
 
 var migrate = args.Contains("--migrate", StringComparer.Ordinal);
 var seed = args.Contains("--seed", StringComparer.Ordinal);
-var builder = WebApplication.CreateBuilder(args.Where(a => a is not "--migrate" and not "--seed").ToArray());
+var listOutbox = args.Contains("--outbox-list", StringComparer.Ordinal);
+var redriveOutbox = args.Contains("--outbox-redrive", StringComparer.Ordinal);
+if ((migrate || seed ? 1 : 0) + (listOutbox ? 1 : 0) + (redriveOutbox ? 1 : 0) > 1)
+    throw new ArgumentException("Choose migration/seed, outbox list, or outbox redrive as one command.");
+var builder = WebApplication.CreateBuilder(args.Where(a => a is not "--migrate" and not "--seed" and not "--outbox-list" and not "--outbox-redrive").ToArray());
 builder.Logging.ClearProviders();
 builder.Logging.AddJsonConsole(options => options.IncludeScopes = true);
 builder.Services.Configure<BookingOptions>(builder.Configuration.GetSection("Booking"));
 builder.Services.Configure<DeliveryOptions>(builder.Configuration.GetSection("Delivery"));
+builder.Services.Configure<ExpiryOptions>(builder.Configuration.GetSection("Expiry"));
+builder.Services.AddOptions<HealthOptions>().Bind(builder.Configuration.GetSection("Health"))
+    .Validate(o => o.DatabaseTimeout > TimeSpan.Zero && o.DatabaseTimeout <= TimeSpan.FromMinutes(1), "Invalid health database timeout.")
+    .Validate(o => o.WorkerStaleAfter.TotalMilliseconds > Math.Clamp(builder.Configuration.GetValue("Workers:PollIntervalMilliseconds", 250), 25, 60_000),
+        "Worker freshness must exceed its polling interval.")
+    .Validate(o => o.BacklogWarningAge > TimeSpan.Zero, "Backlog warning age must be positive.").ValidateOnStart();
 builder.Services.Configure<RouteHandlerOptions>(options => options.ThrowOnBadRequest = true);
 builder.Services.AddSingleton(provider =>
 {
@@ -21,6 +30,11 @@ builder.Services.AddSingleton(provider =>
     return new Database(connectionString);
 });
 builder.Services.AddSingleton<MigrationRunner>();
+builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddSingleton<WorkerHealthRegistry>();
+builder.Services.AddSingleton<IWorkerProgress>(provider => provider.GetRequiredService<WorkerHealthRegistry>());
+builder.Services.AddSingleton<DatabaseReadinessProbe>();
+builder.Services.AddSingleton<ServiceHealth>();
 builder.Services.AddSingleton<IExecutionObserver, ProcessExecutionObserver>();
 builder.Services.AddScoped<IBookingService, BookingService>();
 builder.Services.AddScoped<IExpiryService, ExpiryService>();
@@ -28,6 +42,7 @@ builder.Services.AddScoped<IBookingConfirmedConsumer, BookingConfirmedConsumer>(
 builder.Services.AddScoped<LocalMessageTransport>();
 builder.Services.AddScoped<IMessageTransport, DemonstrationTransport>();
 builder.Services.AddScoped<IOutboxPublisher, OutboxPublisher>();
+builder.Services.AddScoped<IOutboxAdministration, OutboxAdministration>();
 builder.Services.AddHostedService<ExpiryWorker>();
 builder.Services.AddHostedService<OutboxWorker>();
 builder.WebHost.ConfigureKestrel(options => options.Limits.MaxRequestBodySize = 16 * 1024);
@@ -46,6 +61,14 @@ if (migrate || seed)
         await using var scope = app.Services.CreateAsyncScope();
         await DemoSeed.RunAsync(scope.ServiceProvider);
     }
+    return;
+}
+
+if (listOutbox || redriveOutbox)
+{
+    await using var scope = app.Services.CreateAsyncScope();
+    Environment.ExitCode = await OutboxCommand.ExecuteAsync(
+        scope.ServiceProvider.GetRequiredService<IOutboxAdministration>(), app.Configuration, redriveOutbox, Console.Out);
     return;
 }
 
@@ -126,21 +149,16 @@ app.MapDelete("/api/capacity-holds/{holdId:guid}", async (Guid holdId, HttpConte
 app.MapGet("/api/capacity-holds/{holdId:guid}", async (Guid holdId, HttpContext http,
     IBookingService bookings, CancellationToken ct) =>
     WriteResult(http, await bookings.GetAsync(holdId, Identity(http), ct)));
-app.MapGet("/health", async (Database database, CancellationToken ct) =>
-{
-    try
-    {
-        await using var connection = await database.OpenAsync(ct);
-        // Readiness includes applied schema; accepting TCP alone is insufficient.
-        await connection.ExecuteScalarAsync<int>(new CommandDefinition("SELECT count(*)::integer FROM schema_migrations", cancellationToken: ct));
-        return Results.Ok(new { status = "healthy" });
-    }
-    catch (Exception error) when (error is NpgsqlException or TimeoutException)
-    {
-        return Results.Json(new { status = "unhealthy" }, statusCode: 503);
-    }
-});
+app.MapGet("/health/live", () => Results.Ok(new { status = "alive" }));
+app.MapGet("/health/ready", Readiness);
+app.MapGet("/health", Readiness);
 await app.RunAsync();
+
+static async Task<IResult> Readiness(ServiceHealth health, CancellationToken ct)
+{
+    var state = await health.CheckAsync(ct);
+    return Results.Json(state, statusCode: state.Ready ? 200 : 503);
+}
 
 static RequestContext Identity(HttpContext http) => (RequestContext)http.Items["RequestContext"]!;
 static string? ReadKey(HttpContext http)

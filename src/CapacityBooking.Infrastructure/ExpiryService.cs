@@ -1,133 +1,182 @@
 using System.Data;
 using System.Diagnostics;
 using CapacityBooking.Application;
-using CapacityBooking.Domain;
-using Dapper;
+using CapacityBooking.Infrastructure.Business;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
+using Npgsql;
+using ExpiryCandidate = CapacityBooking.Infrastructure.Business.BookingPersistenceSession.ExpiryCandidate;
 
 namespace CapacityBooking.Infrastructure;
 
-/// <summary>Reconciles persisted deadlines; there is no process-local expiry queue.</summary>
-public sealed class ExpiryService(
-    Database database,
-    IExecutionObserver observer,
-    ILogger<ExpiryService> logger) : IExpiryService
+/// <summary>Bounded background traversal plus the shared, transactionally persisted domain expiry transition.</summary>
+public sealed class ExpiryService : IExpiryService
 {
-    public async Task<int> ExpireDueAsync(int batchSize = 100, CancellationToken ct = default)
+    private readonly Database _database;
+    private readonly IExecutionObserver _observer;
+    private readonly ILogger<ExpiryService> _logger;
+    private readonly ExpiryOptions _options;
+    private readonly IWorkerProgress? _progress;
+    private readonly ExpirySweepState _localSweep = new();
+
+    public ExpiryService(Database database, IExecutionObserver observer, ILogger<ExpiryService> logger,
+        IOptions<ExpiryOptions>? options = null, IWorkerProgress? progress = null)
     {
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(batchSize);
-        Guid[] candidates;
-        await using (var connection = await database.OpenAsync(ct))
-        {
-            // Do not claim/lock a hold here: every mutator locks voyage, booking, then hold.
-            candidates = (await connection.QueryAsync<Guid>(new CommandDefinition("""
-                SELECT hold_id
-                FROM capacity_holds
-                WHERE state = 'Active' AND expires_at <= statement_timestamp()
-                ORDER BY expires_at, hold_id
-                LIMIT @BatchSize
-                """, new { BatchSize = batchSize }, cancellationToken: ct))).ToArray();
-        }
-
-        var expired = 0;
-        foreach (var holdId in candidates)
-        {
-            if (await ExpireAsync(holdId, ct))
-                expired++;
-        }
-
-        return expired;
+        _database = database;
+        _observer = observer;
+        _logger = logger;
+        _options = options?.Value ?? new ExpiryOptions();
+        _progress = progress;
+        if (_options.PageSize is < 1 or > 1024 || _options.MaxCandidatesPerPoll is < 1 or > 10_000 ||
+            _options.PollTimeBudget <= TimeSpan.Zero || _options.PollTimeBudget > TimeSpan.FromMinutes(1) ||
+            _options.LockWaitTimeout <= TimeSpan.Zero || _options.LockWaitTimeout > _options.PollTimeBudget)
+            throw new ArgumentOutOfRangeException(nameof(options), "Expiry page, candidate, deadline and lock-wait bounds must be valid.");
     }
 
+    public async Task<int> ExpireDueAsync(int batchSize = 100, CancellationToken ct = default) =>
+        (await SweepDueAsync(_localSweep, batchSize, ct)).Expired;
+
+    public async Task<ExpirySweepResult> SweepDueAsync(ExpirySweepState state, int batchSize = 100,
+        CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(state);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(batchSize);
+        using var usage = state.Enter();
+        using var budget = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        budget.CancelAfter(_options.PollTimeBudget);
+        var workCt = budget.Token;
+        var expired = 0;
+        var examined = 0;
+        var resolved = 0;
+        var busy = 0;
+        var sweepCompleted = false;
+        var budgetExhausted = false;
+        // Bounded by MaxCandidatesPerPoll. One hot voyage costs only one lock attempt per poll.
+        var busyVoyages = new HashSet<string>(StringComparer.Ordinal);
+        try
+        {
+            if (!state.Cutoff.HasValue)
+            {
+                await using var connection = await _database.OpenAsync(workCt);
+                state.Begin(await new BookingPersistenceSession(connection).ReadClockAsync(workCt));
+            }
+
+            while (examined < _options.MaxCandidatesPerPoll && expired < batchSize)
+            {
+                workCt.ThrowIfCancellationRequested();
+                var pageSize = Math.Min(_options.PageSize, _options.MaxCandidatesPerPoll - examined);
+                IReadOnlyList<ExpiryCandidate> page;
+                await using (var connection = await _database.OpenAsync(workCt))
+                    page = await new BookingPersistenceSession(connection).ReadDuePageAsync(state, pageSize, workCt);
+                if (page.Count == 0)
+                {
+                    state.Complete();
+                    sweepCompleted = true;
+                    break;
+                }
+
+                foreach (var candidate in page)
+                {
+                    if (expired >= batchSize)
+                        break;
+                    workCt.ThrowIfCancellationRequested();
+                    examined++;
+                    var outcome = busyVoyages.Contains(candidate.VoyageId)
+                        ? ExpiryAttempt.BusyVoyage
+                        : await ExpireCandidateAsync(candidate, skipBusy: true, workCt);
+                    if (outcome == ExpiryAttempt.Expired)
+                        expired++;
+                    else if (outcome is ExpiryAttempt.BusyVoyage or ExpiryAttempt.BusyItem)
+                    {
+                        busy++;
+                        // A locked booking/hold does not make every other hold on this
+                        // voyage unavailable once its failed transaction has rolled back.
+                        if (outcome == ExpiryAttempt.BusyVoyage)
+                            busyVoyages.Add(candidate.VoyageId);
+                    }
+                    // Advance only after the attempt resolved. Cancellation leaves the interrupted
+                    // item discoverable from the prior cursor; skipped work is revisited next sweep.
+                    state.Advance(candidate.ExpiresAt, candidate.HoldId);
+                    resolved++;
+                }
+                if (expired < batchSize && page.Count < pageSize)
+                {
+                    state.Complete();
+                    sweepCompleted = true;
+                    break;
+                }
+            }
+        }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested && budget.IsCancellationRequested)
+        {
+            budgetExhausted = true;
+        }
+        ct.ThrowIfCancellationRequested();
+        _logger.LogInformation(
+            "Expiry sweep poll completed: Expired {Expired}, Examined {Examined}, Busy {Busy}, SweepCompleted {SweepCompleted}, BudgetExhausted {BudgetExhausted}",
+            expired, examined, busy, sweepCompleted, budgetExhausted);
+        return new ExpirySweepResult(expired, examined, busy, sweepCompleted, budgetExhausted, resolved);
+    }
+
+    /// <summary>Explicit expiry retains blocking semantics for deterministic command/race behavior.</summary>
     public async Task<bool> ExpireAsync(Guid holdId, CancellationToken ct = default)
     {
-        await using var connection = await database.OpenAsync(ct);
-        // Identity fields are immutable. This read locates the first lock in the global order.
-        var identity = await connection.QuerySingleOrDefaultAsync<HoldIdentity>(new CommandDefinition("""
-            SELECT booking_id, voyage_id
-            FROM capacity_holds WHERE hold_id = @HoldId
-            """, new { HoldId = holdId }, cancellationToken: ct));
+        BookingPersistenceSession.HoldIdentity? identity;
+        await using (var connection = await _database.OpenAsync(ct))
+            identity = await new BookingPersistenceSession(connection).FindHoldIdentityAsync(holdId, ct);
         if (identity is null)
             return false;
+        var candidate = new ExpiryCandidate(holdId, identity.BookingId, identity.VoyageId, default);
+        return await ExpireCandidateAsync(candidate, skipBusy: false, ct) == ExpiryAttempt.Expired;
+    }
 
+    private async Task<ExpiryAttempt> ExpireCandidateAsync(ExpiryCandidate candidate, bool skipBusy, CancellationToken ct)
+    {
+        await using var connection = await _database.OpenAsync(ct);
         await using var transaction = await connection.BeginTransactionAsync(IsolationLevel.ReadCommitted, ct);
-        await connection.QuerySingleAsync<string>(new CommandDefinition("""
-            SELECT voyage_id FROM voyage_capacity WHERE voyage_id = @VoyageId FOR UPDATE
-            """, new { identity.VoyageId }, transaction, cancellationToken: ct));
-        await connection.QuerySingleAsync<string>(new CommandDefinition("""
-            SELECT booking_id FROM bookings WHERE booking_id = @BookingId FOR UPDATE
-            """, new { identity.BookingId }, transaction, cancellationToken: ct));
-        var hold = await connection.QuerySingleAsync<HoldRow>(new CommandDefinition("""
-            SELECT hold_id, booking_id, voyage_id, quantity, state, expires_at
-            FROM capacity_holds WHERE hold_id = @HoldId FOR UPDATE
-            """, new { HoldId = holdId }, transaction, cancellationToken: ct));
-
-        await observer.ReachedAsync("business.after-locks", holdId.ToString("D"), ct);
-        // CURRENT_TIMESTAMP is frozen at transaction start, possibly before a long lock wait.
-        var decisionTime = await connection.QuerySingleAsync<DateTime>(new CommandDefinition(
-            "SELECT clock_timestamp()", transaction: transaction, cancellationToken: ct));
-
-        var deadline = new HoldDeadline(new DateTimeOffset(hold.ExpiresAt, TimeSpan.Zero));
-        if (hold.State != "Active" || !deadline.IsExpiredAt(new DateTimeOffset(decisionTime, TimeSpan.Zero)))
+        var session = new BookingPersistenceSession(connection, transaction);
+        try
         {
+            if (skipBusy)
+                await session.SetLocalLockTimeoutAsync(_options.LockWaitTimeout, ct);
+            // SKIP LOCKED applies to the root, never a candidate hold. The local timeout
+            // also bounds later booking/hold locks and relation locks; the poll token bounds I/O.
+            var capacity = await session.LockCapacityAsync(candidate.VoyageId, ct, skipLocked: skipBusy);
+            if (capacity is null)
+                return skipBusy ? ExpiryAttempt.BusyVoyage : ExpiryAttempt.NoChange;
+            var booking = await session.LockBookingAsync(candidate.BookingId, ct);
+            var hold = await session.LockHoldAsync(candidate.HoldId, ct);
+            if (booking is null || hold is null)
+                return ExpiryAttempt.NoChange;
+
+            await _observer.ReachedAsync("business.after-locks", candidate.HoldId.ToString("D"), ct);
+            var decisionTime = await session.ReadClockAsync(ct);
+            var context = new RequestContext(booking.CustomerId, Activity.Current?.TraceId.ToString() ?? "expiry-worker");
+            if (!await HoldExpiryTransition.ApplyAsync(session, capacity, hold, decisionTime, context,
+                    "Capacity returned after the hold deadline.", ct))
+            {
+                await transaction.CommitAsync(ct);
+                _logger.LogInformation(
+                    "Expiry made no transition for HoldId {HoldId}, BookingId {BookingId}, VoyageId {VoyageId}: State {State}, DecisionTime {DecisionTime}, ExpiresAt {ExpiresAt}",
+                    hold.HoldId, hold.BookingId, hold.VoyageId, hold.State, decisionTime, hold.Deadline.ExpiresAt);
+                return ExpiryAttempt.NoChange;
+            }
+            await _observer.ReachedAsync("expiry.before-commit", candidate.HoldId.ToString("D"), ct);
             await transaction.CommitAsync(ct);
-            logger.LogInformation(
-                "Expiry made no transition for HoldId {HoldId}, BookingId {BookingId}, VoyageId {VoyageId}: State {State}, DecisionTime {DecisionTime}, ExpiresAt {ExpiresAt}",
-                holdId, hold.BookingId, hold.VoyageId, hold.State, decisionTime, hold.ExpiresAt);
-            return false;
+            if (skipBusy)
+                _progress?.ItemCompleted("expiry");
+            _logger.LogInformation(
+                "CapacityHoldExpired: HoldId {HoldId}, BookingId {BookingId}, VoyageId {VoyageId}, Quantity {Quantity}, DecisionTime {DecisionTime}, TraceId {TraceId}",
+                hold.HoldId, hold.BookingId, hold.VoyageId, hold.Quantity.Value, decisionTime, context.TraceId);
+            return ExpiryAttempt.Expired;
         }
-
-        var capacityUpdated = await connection.ExecuteAsync(new CommandDefinition("""
-            UPDATE voyage_capacity SET reserved = reserved - @Quantity
-            WHERE voyage_id = @VoyageId AND reserved >= @Quantity
-            """, new { hold.Quantity, hold.VoyageId }, transaction, cancellationToken: ct));
-        if (capacityUpdated != 1)
-            throw new InvalidOperationException("Persisted reserved capacity cannot cover an active hold.");
-
-        var holdUpdated = await connection.ExecuteAsync(new CommandDefinition("""
-            UPDATE capacity_holds
-            SET state = 'Expired', completed_at = @DecisionTime
-            WHERE hold_id = @HoldId AND state = 'Active'
-            """, new { HoldId = holdId, DecisionTime = decisionTime }, transaction, cancellationToken: ct));
-        if (holdUpdated != 1)
-            throw new InvalidOperationException("The locked active hold could not transition to Expired.");
-
-        var traceId = Activity.Current?.TraceId.ToString() ?? "expiry-worker";
-        await connection.ExecuteAsync(new CommandDefinition("""
-            INSERT INTO audit_transitions
-                (booking_id, voyage_id, hold_id, transition, occurred_at, trace_id, details)
-            VALUES
-                (@BookingId, @VoyageId, @HoldId, 'CapacityHoldExpired', @DecisionTime, @TraceId,
-                 'Capacity returned after the hold deadline.')
-            """, new
+        catch (PostgresException error) when (skipBusy && error.SqlState == PostgresErrorCodes.LockNotAvailable)
         {
-            hold.BookingId,
-            hold.VoyageId,
-            HoldId = holdId,
-            DecisionTime = decisionTime,
-            TraceId = traceId
-        }, transaction, cancellationToken: ct));
-
-        await transaction.CommitAsync(ct);
-        logger.LogInformation(
-            "CapacityHoldExpired: HoldId {HoldId}, BookingId {BookingId}, VoyageId {VoyageId}, Quantity {Quantity}, DecisionTime {DecisionTime}, TraceId {TraceId}",
-            holdId, hold.BookingId, hold.VoyageId, hold.Quantity, decisionTime, traceId);
-        return true;
+            // The failed transaction is disposed/rolled back before another candidate is tried.
+            _logger.LogDebug("Expiry deferred a busy item: HoldId {HoldId}, VoyageId {VoyageId}", candidate.HoldId, candidate.VoyageId);
+            return ExpiryAttempt.BusyItem;
+        }
     }
 
-    private sealed class HoldIdentity
-    {
-        public string BookingId { get; set; } = "";
-        public string VoyageId { get; set; } = "";
-    }
-
-    private sealed class HoldRow
-    {
-        public Guid HoldId { get; set; }
-        public string BookingId { get; set; } = "";
-        public string VoyageId { get; set; } = "";
-        public int Quantity { get; set; }
-        public string State { get; set; } = "";
-        public DateTime ExpiresAt { get; set; }
-    }
+    private enum ExpiryAttempt { NoChange, Expired, BusyVoyage, BusyItem }
 }

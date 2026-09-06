@@ -11,7 +11,9 @@ flowchart TB
         subgraph source["Bounded context: Booking Capacity"]
             api["Task-oriented HTTP API"]:::component
             coordinator["BookingService<br/>application transaction coordinator"]:::component
-            expiry["ExpiryService + durable polling worker"]:::component
+            expiry["ExpiryService + bounded sweep worker"]:::component
+            transition["Shared HoldExpiryTransition<br/>domain decision + caller-owned session"]:::component
+            ops["OutboxAdministration CLI<br/>quarantine list + audited redrive"]:::component
 
             subgraph txA["Consistency boundary A: one local business transaction"]
                 key["Persisted idempotency claim<br/>and completed API response"]:::storage
@@ -21,7 +23,7 @@ flowchart TB
                 audit["Audit transition rows"]:::storage
                 outbox["Outbox: BookingConfirmed integration intent"]:::storage
             end
-            publisher["OutboxPublisher<br/>separate lease / mark transactions"]:::component
+            publisher["OutboxPublisher<br/>separate claim / outcome transactions"]:::component
         end
 
         transport["LocalMessageTransport<br/>acknowledges after consumer commit"]:::component
@@ -44,8 +46,9 @@ flowchart TB
     capacity -->|owns| hold
     coordinator --> audit
     coordinator --> outbox
-    expiry -->|same lock order and local transaction protocol| capacity
-    expiry --> hold
+    expiry --> transition --> capacity
+    coordinator --> transition
+    ops -->|separate version-checked state and audit transaction| postgres
     outbox -->|read pending after source commit| publisher
     publisher --> transport --> consumer
     publisher -. future transport adapter .-> rabbit
@@ -78,7 +81,7 @@ The diagram shows confirmation's full transaction scope. Create and cancellation
 | Aggregate | `VoyageCapacity` owns limited-resource accounting and its holds; `Booking` owns the logical request and one confirmation. `CapacityHold` has identity/lifecycle but is an entity inside capacity ownership. |
 | Value object | `CapacityUnits` validates positive whole units; `HoldDeadline` defines strict confirmation and inclusive expiry comparisons. |
 | Transaction | Boundary A deliberately spans both roots plus the relevant support records. Boundary B atomically commits inbox identity and the downstream projection, on a separate connection/transaction. |
-| Repository operations | Explicit Dapper queries and writes in `BookingService`/`ExpiryService` use the provided transaction. Root counters plus one target/relevant active hold are loaded; historical aggregate collections are not materialized. |
+| Repository operations | `BookingPersistenceSession` provides ordered loading, database time and SQL writes. `HoldExpiryTransition` shares the domain expiry decision; `IdempotentCommandExecutor` coordinates durable API replay. Each helper uses the caller-owned transaction. Root counters plus one target/relevant active hold are loaded; historical aggregate collections are not materialized. |
 | Integration | `BookingConfirmedMessage` is the versioned contract. Source confirmation is complete before the publisher runs. At-least-once delivery can duplicate this message; Boundary B protects its effective result. |
 | Physical storage | Both boundaries use one PostgreSQL database in the demonstration. The downstream tables have no foreign keys to source bookings or outbox, and the consumer does not join source tables. Shared hardware does not make the two commits atomic. |
 | Deployment | API, workers and demonstration consumer run in one application. A bounded context, aggregate, table, broker topic/queue and deployment unit are distinct concepts. No separate microservice deployment is needed. |

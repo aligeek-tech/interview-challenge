@@ -14,13 +14,15 @@ The transaction deliberately spans both roots because their outcomes must be ato
 
 `BookingId` globally identifies the logical request. Its customer, voyage and quantity are fixed by the first accepted hold. Expired/cancelled holds may be replaced; confirmed bookings cannot create another. `Idempotency-Key` identifies an API operation, not the booking.
 
-**PostgreSQL Read Committed uses this lock order:** idempotency claim for create/confirm → voyage capacity → booking → target/active hold. Only afterward does a separate `SELECT clock_timestamp()` establish the decision instant. Expiry reads candidate IDs without locks, then follows the same order; locking holds first would risk deadlocks.
+**PostgreSQL Read Committed uses this lock order:** idempotency claim for create/confirm → voyage capacity → booking → target/active hold. Only afterward does a separate `SELECT clock_timestamp()` establish the decision instant. Expiry reads candidate IDs without locks, then follows the same order; locking holds first would risk deadlocks. The background path skips a busy voyage root, bounds later waits, rolls back unresolved attempts and continues a worker-owned keyset sweep across polls. The explicit expiry operation retains blocking semantics for deterministic command/race behaviour.
 
 An active hold confirms only when `decisionTime < expiresAt`; equality belongs to expiry. An admitted pre-deadline decision may commit afterward. Arriving or beginning a transaction earlier gives no priority. PostgreSQL `now()`/`CURRENT_TIMESTAMP` report transaction-start time, making them unsuitable after a lock wait. [Database clock semantics](https://www.postgresql.org/docs/current/functions-datetime.html)
 
 Creation reserves units; consumption transfers reserved to confirmed; expiry/cancellation releases reserved units once. Terminal states cannot reopen. Late DELETE expires the hold; consumed holds cannot cancel. Voyage closure blocks new holds while preserving existing confirmation windows.
 
 Database protections include nonnegative counters, overflow-safe `reserved + confirmed <= total`, positive quantities, partial active-hold uniqueness, unique booking/confirmed-hold identities and composite foreign keys. Tests also reconcile counters against hold/booking rows.
+
+`HoldExpiryTransition` delegates every expiry decision to `VoyageCapacity.ExpireHold` and persists state/counters/audit through the caller-owned `BookingPersistenceSession`. Replacement, confirmation, late cancellation and scheduled expiry share that path. `IdempotentCommandExecutor` owns claim/response transactions; response mapping and SQL persistence are separate focused collaborators. Helpers never commit an independent business transaction.
 
 Expiry persists in deadlines/state. Due-but-unreconciled holds conservatively retain capacity. Confirmation lazily expires a due active hold; replacement creation expires/releases its prior due hold before inserting another. GET may project elapsed state without writing.
 

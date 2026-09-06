@@ -13,17 +13,19 @@ sequenceDiagram
     participant P as Outbox publisher
     participant T as Local transport
     participant K as Downstream consumer
+    participant O as Recovery operator
 
     C->>D: BEGIN and claim idempotency key
     E->>D: Read candidate identity, BEGIN
     alt Confirmation obtains locks and decides before deadline
         C->>D: Lock voyage, then booking, then hold
-        E->>D: Request voyage lock, wait
+        E->>D: Try voyage lock with SKIP LOCKED
+        D-->>E: Busy - roll back and advance sweep to unrelated work
         C->>D: Read clock_timestamp(), Active and now < expiresAt
         C->>D: Consume hold, confirm booking, update counters
         C->>D: Write audit, outbox M1 and idempotent response
         C->>D: COMMIT
-        D-->>E: Acquire voyage lock after confirmation commits
+        E->>D: Later sweep revisits durable hold and acquires voyage lock
         E->>D: Lock booking and hold, then read DB time
         E->>D: Observe Consumed, COMMIT no transition
     else Expiry obtains locks at or after deadline
@@ -58,8 +60,18 @@ sequenceDiagram
         K->>D: COMMIT without another projection write
         K-->>T: Duplicate safely acknowledged
         T-->>P: Acknowledge delivery
-        P->>D: Mark published only WHERE lease_token = L2
+        P->>D: Mark Published plus audit only WHERE lease_token = L2
         Note over D,K: One effective downstream result, repeated delivery is allowed
+    end
+
+    opt Alternative delivery path - still-Pending message fails permanently or exhausts budget
+        P->>D: Quarantine plus audit, guarded by current lease token
+        Note over P,D: Pending healthy messages remain eligible
+        O->>D: Inspect quarantine and resolve cause
+        O->>D: Redrive with expected version, action ID, actor and reason
+        D-->>O: Commit Pending state plus action result and audit
+        P->>T: Retry original MessageId and payload
+        Note over D,K: Inbox still protects against an earlier ambiguous delivery
     end
 ```
 
@@ -67,4 +79,4 @@ If confirmation acquires the locks after the deadline while the hold still says 
 
 The publication section depicts the **implemented local transport**: acknowledgement follows the consumer's separate database commit. With the proposed RabbitMQ adapter, publisher confirmation establishes broker acceptance and the consumer acknowledges independently after its transaction. The repeated-MessageId/inbox protection is unchanged. [RabbitMQ confirmation boundaries](https://www.rabbitmq.com/docs/confirms).
 
-The failure seams are `business.after-locks`, `confirm.after-decision`, `confirm.before-commit`, `consumer.before-commit` and `outbox.after-publish`. Integration tests inject gates or exceptions through internal DI; process recovery demonstrations terminate and relaunch the application against retained database state. A handled publication exception schedules a retry; a dead process leaves its lease to expire.
+The failure seams are `business.after-locks`, `confirm.after-decision`, `confirm.before-commit`, `consumer.before-commit` and `outbox.after-publish`. Integration tests inject gates or exceptions through internal DI; process recovery demonstrations terminate and relaunch the application against retained database state. A classified delivery failure schedules retry or quarantine with an atomic audit; a dead process leaves its lease to expire. A stale owner cannot mark, retry or quarantine another lease owner’s row. The explicit `ExpireAsync` operation still supports blocking lock-race tests; the scheduled path shown here defers busy work and revisits it.

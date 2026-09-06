@@ -8,6 +8,7 @@ This model fixes the vocabulary, ownership and race decisions for the implementa
 flowchart LR
     customer([Customer]):::actor
     expiryActor([Durable expiry worker]):::actor
+    operator([Recovery operator]):::actor
     request[RequestCapacityHold]:::command
     confirm[ConfirmBooking]:::command
     cancel[CancelCapacityHold]:::command
@@ -24,8 +25,8 @@ flowchart LR
         rejected[CapacityHoldRejected]:::event
         dedup["Policy: persisted key + fingerprint<br/>replay completed results"]:::policy
         duplicate["DuplicateCommandDetected<br/>operational observation"]:::observation
-        deadline["Policy: persist deadline;<br/>poll due work after restart"]:::policy
-        publish["Policy: atomic outbox;<br/>retry publication"]:::policy
+        deadline["Policy: persist deadline;<br/>bounded fair sweep after restart"]:::policy
+        publish["Policy: atomic outbox;<br/>bounded retry or quarantine"]:::policy
         hotspots["H1–H7 hotspots<br/>ownership, confirmation, time,<br/>atomicity, event scope, duplicates"]:::hotspot
     end
 
@@ -34,6 +35,8 @@ flowchart LR
         inbox["Policy: inbox + projection<br/>commit in one transaction"]:::policy
         result["One effective<br/>booking confirmation projection"]:::event
     end
+    redrive["Operational policy: resolve cause;<br/>audited redrive, same MessageId"]:::policy
+    operator --> redrive --> publish
     payment["Future external Payment Authorization<br/>documented; not implemented"]:::external
 
     customer --> request --> capacity
@@ -70,10 +73,10 @@ Legend: rounded yellow = actor; blue = command; orange = business event/fact; am
 
 | Event Storming category | Concrete model |
 |---|---|
-| Actors | Customer requests/confirms/cancels; expiry worker resumes persisted due work; outbox publisher is the system actor applying the publication policy. |
+| Actors | Customer requests/confirms/cancels; expiry worker resumes persisted due work; outbox publisher applies the publication policy; an operator resolves quarantined deliveries through audited redrive. |
 | Commands | `RequestCapacityHold`, `ConfirmBooking`, `CancelCapacityHold`, `ExpireHold`. The public service names are `CreateHoldAsync`, `ConfirmAsync`, `CancelAsync` and the expiry service methods. |
 | Domain events | `CapacityHoldCreated`, `CapacityHoldConsumed`, `BookingConfirmed`, `CapacityHoldExpired`, `CapacityHoldCancelled`; `CapacityHoldRejected` records a rejected create decision. These are audit facts emitted by transaction coordination after domain decisions, not unused event-class scaffolding. |
-| Policies | Deduplicate API operations in durable storage; reserve only available open-voyage capacity; decide using database time after locks; poll persisted deadlines; atomically record integration intent; retry delivery; deduplicate downstream within its own transaction. |
+| Policies | Deduplicate API operations in durable storage; reserve only available open-voyage capacity; decide using database time after locks; fairly scan persisted deadlines with bounded resources; atomically record integration intent; classify and bound retries, quarantine and audit redrive; deduplicate downstream within its own transaction. |
 | Aggregates | `VoyageCapacity` owns counters and its `CapacityHold` entities. `Booking` owns immutable request binding and confirmation identity. |
 | External systems | PostgreSQL provides durable storage; a messaging abstraction provides delivery, with a direct acknowledged local transport for the executable and RabbitMQ proposed for production; Payment Authorization is a future external dependency. |
 | Hotspots | H1–H7 below establish ownership, deadline semantics, consistency, event scope and duplicate identity. |
@@ -83,7 +86,7 @@ Legend: rounded yellow = actor; blue = command; orange = business event/fact; am
 
 | Hotspot | Resolution and executable consequence |
 |---|---|
-| H1 — Who owns the capacity invariant? | `VoyageCapacity`. Every mutator locks its durable row; the transaction changes counters and corresponding hold/booking state together. Database checks prevent invalid counter totals. |
+| H1 — Who owns the capacity invariant? | `VoyageCapacity`. Every expiry trigger calls the same domain transition through `HoldExpiryTransition`; every mutator locks its durable row; the transaction changes counters and corresponding hold/booking state together. Database checks prevent invalid counter totals. |
 | H2 — Where does Capacity Hold belong? | A lifecycle entity owned by `VoyageCapacity`, stored separately for targeted access. It is not an independent service or aggregate. `Booking` remains a separate root for logical request identity. |
 | H3 — When is Booking confirmed? | The decision is admitted only before the deadline while business locks are held. Confirmation becomes durable and externally successful when hold consumption, booking fields, audit, idempotent response and outbox commit together. Broker delivery is not part of that commit. |
 | H4 — What wins confirmation versus expiry? | Read the database clock after all locks. Active + `decisionTime < expiresAt` permits confirmation; equality/later expires. A pre-deadline accepted decision may commit later. Expiry cannot release consumed capacity, and transaction-start time gives no priority. |
@@ -92,3 +95,5 @@ Legend: rounded yellow = actor; blue = command; orange = business event/fact; am
 | H7 — How are duplicates identified across instances? | API operations use database uniqueness over `(customer, operation-with-route, key)` plus a canonical typed fingerprint and stored result. Stable `BookingId` additionally blocks duplicate logical effects under different keys. Integration delivery uses persisted `(consumer_name, message_id)` uniqueness with its side effect in the same transaction. |
 
 The main flow is reserve → consume → confirm, with consume and confirm in the same transaction. The alternate terminal paths are expire and cancel. Every terminal transition preserves allocated-capacity accounting and cannot be reversed. A replacement hold uses the same immutable booking request and a new operation key; it cannot revive an earlier expired/cancelled hold.
+
+Operational quarantine and redrive are delivery-policy state, not additional booking-domain facts. Their evidence is in `outbox_delivery_audit`; source booking confirmation remains committed while publication is pending or quarantined. H1/H2 are exercised by expiry transition parity tests, H3/H4 by gated deadline races, H5 by rollback/process tests, H6 by outbox/inbox tests, and H7 by concurrent command and redrive tests. The [verification map](../verification.md) provides exact test names.
