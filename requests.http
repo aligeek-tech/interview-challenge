@@ -1,0 +1,27 @@
+@baseUrl = http://127.0.0.1:5080
+@customer = demo-customer
+
+### Seeded VYG-1001 has three units remaining
+POST {{baseUrl}}/api/voyages/VYG-1001/capacity-holds
+X-Customer-Id: {{customer}}
+Idempotency-Key: demo-create-9001
+Content-Type: application/json
+
+{"bookingId":"BKG-9001","quantity":2}
+
+### Replace holdId with the returned UUID; repeat with the same key to see stable replay
+@holdId = 00000000-0000-0000-0000-000000000000
+POST {{baseUrl}}/api/capacity-holds/{{holdId}}/confirm
+X-Customer-Id: {{customer}}
+Idempotency-Key: demo-confirm-9001
+
+### Inspect current effective hold state
+GET {{baseUrl}}/api/capacity-holds/{{holdId}}
+X-Customer-Id: {{customer}}
+
+### Cancelling a consumed hold is rejected and does not release confirmed capacity
+DELETE {{baseUrl}}/api/capacity-holds/{{holdId}}
+X-Customer-Id: {{customer}}
+
+### Database and migration readiness
+GET {{baseUrl}}/health

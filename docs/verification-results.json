@@ -1,0 +1,391 @@
+{
+  "verified_at_utc": "2026-09-06T09:54:38.227524+00:00",
+  "verification": "Locked restore, zero-warning build and all tests in a separate clean source directory with no copied bin/obj/.tools",
+  "sdk": "10.0.400",
+  "database": "PostgreSQL 18.6",
+  "build": {
+    "errors": 0,
+    "warnings": 0
+  },
+  "totals": {
+    "tests": 59,
+    "passed": 59,
+    "failed": 0,
+    "skipped": 0
+  },
+  "runs": [
+    {
+      "suite": "unit",
+      "total": 10,
+      "passed": 10,
+      "failed": 0,
+      "skipped": 0,
+      "tests": [
+        {
+          "name": "CapacityBooking.UnitTests.CapacityDomainTests.ACapacityRootCannotConsumeAnotherVoyagesHold",
+          "outcome": "Passed",
+          "duration": "00:00:00.0000968"
+        },
+        {
+          "name": "CapacityBooking.UnitTests.CapacityDomainTests.BookingCannotConfirmUsingAnUnconsumedOrAnotherBookingsHold",
+          "outcome": "Passed",
+          "duration": "00:00:00.0029883"
+        },
+        {
+          "name": "CapacityBooking.UnitTests.CapacityDomainTests.CancellationAtTheDeadlineIsAnExpiryAndReleasesOnlyOnce",
+          "outcome": "Passed",
+          "duration": "00:00:00.0001968"
+        },
+        {
+          "name": "CapacityBooking.UnitTests.CapacityDomainTests.CapacityValidationDoesNotOverflowWhenCountersAreLarge",
+          "outcome": "Passed",
+          "duration": "00:00:00.0015547"
+        },
+        {
+          "name": "CapacityBooking.UnitTests.CapacityDomainTests.ConfirmMovesTheReservationToConfirmedAndTerminalOperationsCannotReleaseIt",
+          "outcome": "Passed",
+          "duration": "00:00:00.0001659"
+        },
+        {
+          "name": "CapacityBooking.UnitTests.CapacityDomainTests.FailedDeadlineDecisionDoesNotMutateHoldOrCapacity",
+          "outcome": "Passed",
+          "duration": "00:00:00.0009233"
+        },
+        {
+          "name": "CapacityBooking.UnitTests.HoldDeadlineTests.EquivalentInstantsWithDifferentOffsetsHaveTheSameDeadlineDecision",
+          "outcome": "Passed",
+          "duration": "00:00:00.0000351"
+        },
+        {
+          "name": "CapacityBooking.UnitTests.HoldDeadlineTests.ExactEqualityBelongsToExpiry",
+          "outcome": "Passed",
+          "duration": "00:00:00.0000277"
+        },
+        {
+          "name": "CapacityBooking.UnitTests.HoldDeadlineTests.InstantAfterDeadlineCannotConfirm",
+          "outcome": "Passed",
+          "duration": "00:00:00.0000306"
+        },
+        {
+          "name": "CapacityBooking.UnitTests.HoldDeadlineTests.LastInstantBeforeDeadlineMayConfirm",
+          "outcome": "Passed",
+          "duration": "00:00:00.0021186"
+        }
+      ]
+    },
+    {
+      "suite": "integration",
+      "total": 49,
+      "passed": 49,
+      "failed": 0,
+      "skipped": 0,
+      "tests": [
+        {
+          "name": "CapacityBooking.IntegrationTests.BusinessLifecycleTests.BookingIdentityCannotMoveCustomerVoyageOrQuantity",
+          "outcome": "Passed",
+          "duration": "00:00:00.0145736"
+        },
+        {
+          "name": "CapacityBooking.IntegrationTests.BusinessLifecycleTests.CancelIsRepeatableAndCancelledHoldCannotConfirm",
+          "outcome": "Passed",
+          "duration": "00:00:00.0132849"
+        },
+        {
+          "name": "CapacityBooking.IntegrationTests.BusinessLifecycleTests.ClosedVoyageRejectsHoldWithoutReservingCapacity",
+          "outcome": "Passed",
+          "duration": "00:00:00.0042000"
+        },
+        {
+          "name": "CapacityBooking.IntegrationTests.BusinessLifecycleTests.ConfirmedBookingCannotReserveAgainOrReleaseItsConsumedHold",
+          "outcome": "Passed",
+          "duration": "00:00:00.0182317"
+        },
+        {
+          "name": "CapacityBooking.IntegrationTests.BusinessLifecycleTests.CreateReadConfirmMovesReservedUnitsExactlyOnceAndPersistsEvent",
+          "outcome": "Passed",
+          "duration": "00:00:00.0254888"
+        },
+        {
+          "name": "CapacityBooking.IntegrationTests.BusinessLifecycleTests.CustomerOwnershipAndRequiredIdentityAreEnforced",
+          "outcome": "Passed",
+          "duration": "00:00:00.0114094"
+        },
+        {
+          "name": "CapacityBooking.IntegrationTests.BusinessLifecycleTests.DatabaseConstraintRejectsOversellingEvenOutsideApplicationCode",
+          "outcome": "Passed",
+          "duration": "00:00:00.0028823"
+        },
+        {
+          "name": "CapacityBooking.IntegrationTests.BusinessLifecycleTests.DifferentKeysCannotCreateTwoActiveHoldsForOneBooking",
+          "outcome": "Passed",
+          "duration": "00:00:00.0078646"
+        },
+        {
+          "name": "CapacityBooking.IntegrationTests.BusinessLifecycleTests.ExpiredActiveHoldIsReleasedWhenCreatingAReplacement",
+          "outcome": "Passed",
+          "duration": "00:00:00.0110013"
+        },
+        {
+          "name": "CapacityBooking.IntegrationTests.BusinessLifecycleTests.ExpiredHoldCannotConfirmAndExpiryNeverReleasesTwice",
+          "outcome": "Passed",
+          "duration": "00:00:00.0212457"
+        },
+        {
+          "name": "CapacityBooking.IntegrationTests.BusinessLifecycleTests.InvalidQuantitiesAreRejectedWithoutDatabaseEffects(quantity: -1)",
+          "outcome": "Passed",
+          "duration": "00:00:00.0038994"
+        },
+        {
+          "name": "CapacityBooking.IntegrationTests.BusinessLifecycleTests.InvalidQuantitiesAreRejectedWithoutDatabaseEffects(quantity: 0)",
+          "outcome": "Passed",
+          "duration": "00:00:00.0032094"
+        },
+        {
+          "name": "CapacityBooking.IntegrationTests.BusinessLifecycleTests.ReadProjectsAnElapsedDeadlineWithoutMutatingTheStoredHold",
+          "outcome": "Passed",
+          "duration": "00:00:00.0119107"
+        },
+        {
+          "name": "CapacityBooking.IntegrationTests.ConcurrencyTests.ConcurrentDifferentKeysForOneBookingStillCreateOnlyOneHold",
+          "outcome": "Passed",
+          "duration": "00:00:00.0349522"
+        },
+        {
+          "name": "CapacityBooking.IntegrationTests.ConcurrencyTests.ConcurrentExpiryWorkersReleaseCapacityExactlyOnce",
+          "outcome": "Passed",
+          "duration": "00:00:00.0193243"
+        },
+        {
+          "name": "CapacityBooking.IntegrationTests.ConcurrencyTests.ConfirmationDecisionBeforeDeadlineWinsEvenWhenExpiryWaitsAndCommitIsLater",
+          "outcome": "Passed",
+          "duration": "00:00:01.5603826"
+        },
+        {
+          "name": "CapacityBooking.IntegrationTests.ConcurrencyTests.ConfirmationThatWaitsAcrossDeadlineUsesDatabaseTimeAfterTheLockWait",
+          "outcome": "Passed",
+          "duration": "00:00:01.5352257"
+        },
+        {
+          "name": "CapacityBooking.IntegrationTests.ConcurrencyTests.ExpiryHoldingTheBusinessLockWinsAgainstConcurrentConfirmation",
+          "outcome": "Passed",
+          "duration": "00:00:00.0556240"
+        },
+        {
+          "name": "CapacityBooking.IntegrationTests.ConcurrencyTests.TwentyIndependentDatabaseSessionsCompetingForOneUnitHaveExactlyOneWinner",
+          "outcome": "Passed",
+          "duration": "00:00:00.0724168"
+        },
+        {
+          "name": "CapacityBooking.IntegrationTests.DatabaseInvariantTests.DatabaseCannotCommitAnUnfinishedIdempotencyClaim",
+          "outcome": "Passed",
+          "duration": "00:00:00.0031070"
+        },
+        {
+          "name": "CapacityBooking.IntegrationTests.DatabaseInvariantTests.DatabaseRejectsASecondActiveHoldForTheSameBooking",
+          "outcome": "Passed",
+          "duration": "00:00:00.0063536"
+        },
+        {
+          "name": "CapacityBooking.IntegrationTests.DatabaseInvariantTests.DatabaseRejectsConfirmationUsingAnotherBookingsHold",
+          "outcome": "Passed",
+          "duration": "00:00:00.0105693"
+        },
+        {
+          "name": "CapacityBooking.IntegrationTests.HttpContractTests.InvalidJsonBodiesReturnClientErrorsWithoutBusinessEffects(body: \"null\")",
+          "outcome": "Passed",
+          "duration": "00:00:00.0018978"
+        },
+        {
+          "name": "CapacityBooking.IntegrationTests.HttpContractTests.InvalidJsonBodiesReturnClientErrorsWithoutBusinessEffects(body: \"{\\\"bookingId\\\":null,\\\"quantity\\\":1}\")",
+          "outcome": "Passed",
+          "duration": "00:00:00.0020991"
+        },
+        {
+          "name": "CapacityBooking.IntegrationTests.HttpContractTests.InvalidJsonBodiesReturnClientErrorsWithoutBusinessEffects(body: \"{malformed\")",
+          "outcome": "Passed",
+          "duration": "00:00:00.0029159"
+        },
+        {
+          "name": "CapacityBooking.IntegrationTests.HttpContractTests.OversizedRequestIsRejectedByTheActualHttpServer",
+          "outcome": "Passed",
+          "duration": "00:00:00.2456727"
+        },
+        {
+          "name": "CapacityBooking.IntegrationTests.IdempotencyTests.ConcurrentDuplicateCreatesWaitOnThePersistedClaimAcrossHosts",
+          "outcome": "Passed",
+          "duration": "00:00:00.0071831"
+        },
+        {
+          "name": "CapacityBooking.IntegrationTests.IdempotencyTests.ConfirmationReplayIsStableAcrossHostsAndProducesOneOutboxEvent",
+          "outcome": "Passed",
+          "duration": "00:00:00.0168839"
+        },
+        {
+          "name": "CapacityBooking.IntegrationTests.IdempotencyTests.DuplicateCreateAcrossTwoHostsReturnsOriginalResponseAndOriginalDeadline",
+          "outcome": "Passed",
+          "duration": "00:00:00.0080974"
+        },
+        {
+          "name": "CapacityBooking.IntegrationTests.IdempotencyTests.ExpectedRejectionReplaysAfterCapacityBecomesAvailable",
+          "outcome": "Passed",
+          "duration": "00:00:00.0165432"
+        },
+        {
+          "name": "CapacityBooking.IntegrationTests.IdempotencyTests.MutatingPostEndpointsRequireIdempotencyKeys",
+          "outcome": "Passed",
+          "duration": "00:00:00.0121913"
+        },
+        {
+          "name": "CapacityBooking.IntegrationTests.IdempotencyTests.ReplayingCreateAfterCancellationDoesNotCreateAReplacementOrExtendTtl",
+          "outcome": "Passed",
+          "duration": "00:00:00.0088603"
+        },
+        {
+          "name": "CapacityBooking.IntegrationTests.IdempotencyTests.SameKeyWithDifferentPayloadIsAConflict",
+          "outcome": "Passed",
+          "duration": "00:00:00.0071378"
+        },
+        {
+          "name": "CapacityBooking.IntegrationTests.ProcessRecoveryTests.FreshOperatingSystemProcessExpiresHoldsPersistedBeforeShutdown",
+          "outcome": "Passed",
+          "duration": "00:00:02.5236470"
+        },
+        {
+          "name": "CapacityBooking.IntegrationTests.ProcessRecoveryTests.ProcessDeathAfterPublishLeavesLeaseAndRestartSafelyRedelivers",
+          "outcome": "Passed",
+          "duration": "00:00:01.2802484"
+        },
+        {
+          "name": "CapacityBooking.IntegrationTests.ProcessRecoveryTests.ProcessDeathBeforeConfirmationCommitRollsBackAndSameKeyCanRetry",
+          "outcome": "Passed",
+          "duration": "00:00:00.5639932"
+        },
+        {
+          "name": "CapacityBooking.IntegrationTests.ProcessRecoveryTests.ProcessFailpointsAreRejectedOutsideDevelopment",
+          "outcome": "Passed",
+          "duration": "00:00:00.1542847"
+        },
+        {
+          "name": "CapacityBooking.IntegrationTests.ProcessRecoveryTests.ProductionProcessRefusesToServeWithTheDemonstrationIdentityStub",
+          "outcome": "Passed",
+          "duration": "00:00:00.1457604"
+        },
+        {
+          "name": "CapacityBooking.IntegrationTests.ProcessRecoveryTests.TransportOutageAcrossProcessRestartPreservesConfirmationAndRecoversPublication",
+          "outcome": "Passed",
+          "duration": "00:00:01.2975500"
+        },
+        {
+          "name": "CapacityBooking.IntegrationTests.RecoveryTests.AbandonedOutboxLeaseCanBeReclaimedAfterItsDeadline",
+          "outcome": "Passed",
+          "duration": "00:00:00.0129532"
+        },
+        {
+          "name": "CapacityBooking.IntegrationTests.RecoveryTests.ConcurrentDuplicateDeliveriesWaitOnInboxAndProduceOneEffect",
+          "outcome": "Passed",
+          "duration": "00:00:00.0175278"
+        },
+        {
+          "name": "CapacityBooking.IntegrationTests.RecoveryTests.ConfirmationFailureRollsBackBookingCountersAuditOutboxAndIdempotency(point: \"confirm.after-decision\")",
+          "outcome": "Passed",
+          "duration": "00:00:00.0181890"
+        },
+        {
+          "name": "CapacityBooking.IntegrationTests.RecoveryTests.ConfirmationFailureRollsBackBookingCountersAuditOutboxAndIdempotency(point: \"confirm.before-commit\")",
+          "outcome": "Passed",
+          "duration": "00:00:00.0154945"
+        },
+        {
+          "name": "CapacityBooking.IntegrationTests.RecoveryTests.DuplicateEventConsumptionHasOneEffectiveResult",
+          "outcome": "Passed",
+          "duration": "00:00:00.0118976"
+        },
+        {
+          "name": "CapacityBooking.IntegrationTests.RecoveryTests.FailedPublicationLeavesConfirmationCommittedAndEventAvailableForRetry",
+          "outcome": "Passed",
+          "duration": "00:00:00.0316765"
+        },
+        {
+          "name": "CapacityBooking.IntegrationTests.RecoveryTests.FailureAfterPublishBeforeMarkRedeliversSameMessageWithOneDownstreamEffect",
+          "outcome": "Passed",
+          "duration": "00:00:00.0206725"
+        },
+        {
+          "name": "CapacityBooking.IntegrationTests.RecoveryTests.InboxAndProjectionRollBackTogetherAndRetryCanApplyTheMessage",
+          "outcome": "Passed",
+          "duration": "00:00:00.1033019"
+        },
+        {
+          "name": "CapacityBooking.IntegrationTests.RecoveryTests.StalePublisherCannotOverwriteAReclaimedLeaseOrRescheduleAnAlreadyPublishedMessage(oldAttemptFails: False)",
+          "outcome": "Passed",
+          "duration": "00:00:00.0165327"
+        },
+        {
+          "name": "CapacityBooking.IntegrationTests.RecoveryTests.StalePublisherCannotOverwriteAReclaimedLeaseOrRescheduleAnAlreadyPublishedMessage(oldAttemptFails: True)",
+          "outcome": "Passed",
+          "duration": "00:00:00.0146323"
+        }
+      ]
+    }
+  ],
+  "source_sha256": {
+    "CapacityBooking.sln": "31126c25c19b810394dfbfd05d0186b031fb816cf2f20dcc9d874203c45fdf2a",
+    "Directory.Build.props": "244a68f5f7545aa1d4ff06363ef6e1826ef2249be415d015ed5ead9ed5576848",
+    "global.json": "2173d0f4243f471a07a939fb0eda8c9659cddbfa5f8471996f7be8361b33a18f",
+    "scripts/dotnet.sh": "0e55ae6c718ddd7df559fe9a7037fe30a58d950fdb0ea4388552a56b0000b9f3",
+    "scripts/verify.sh": "d091edb162817ac0d28e48431ecfbb543377d7881439e085d535ac13b76c984b",
+    "src/CapacityBooking.Api/CapacityBooking.Api.csproj": "cde83ba433cf72619849c30d9515869d3e0f84097fe34c63aaa1144ec7c42b73",
+    "src/CapacityBooking.Api/DemoSeed.cs": "6bcee78434bf4d419be32fe4b41eae268be0ea5b53280e3943aa54132e41329c",
+    "src/CapacityBooking.Api/ProcessExecutionObserver.cs": "d0a5b86d7aca037a7727a042f57633700ef7cb0581651d43411be71fcd214a6a",
+    "src/CapacityBooking.Api/Program.cs": "0943326e7cf3dd2789e74d1af363953f38ae58e417796ef77e171d590ad2e309",
+    "src/CapacityBooking.Api/Workers.cs": "0b9f658fce285e452ee4842c98f3266535c1975e522d546e6b6b8411b4e41c5e",
+    "src/CapacityBooking.Api/appsettings.json": "daca2b4617890fb4b81e7f90743cf02483e35d5c3a02434ceb25e7459edd1639",
+    "src/CapacityBooking.Api/packages.lock.json": "a8fde7af27fd43f00753c60ab18c6bdbc259113d1c58013f5285ea53354f8dd2",
+    "src/CapacityBooking.Application/CapacityBooking.Application.csproj": "e65b923ec96372876af424b6fc9ad8d46c5e7f2a88dd39498424defae2cefaf0",
+    "src/CapacityBooking.Application/Contracts.cs": "a540d36aba29023938fefac6e73060cba11444f8fb72c1fe849f13c589ffa21b",
+    "src/CapacityBooking.Application/packages.lock.json": "9af3abd6cd42f044adac5cf2fc62d1bd45a980b0d2a3762da4a7954701200919",
+    "src/CapacityBooking.Domain/Booking.cs": "86c574d0a5ca6528949efcddcb8f9b52b37846d9fc3a6349cf69e8c35099e426",
+    "src/CapacityBooking.Domain/CapacityBooking.Domain.csproj": "8d654c44b7bebb6b31a9f2f606927f45b5072193adc4eef8cce3f3cf3b278df3",
+    "src/CapacityBooking.Domain/CapacityHold.cs": "141c7896526640ecafeed97c0f220931fd36c3a55bfe606376b7495e5e1d517b",
+    "src/CapacityBooking.Domain/CapacityUnits.cs": "b5b12c5ed5ee1a7e0e528c5e752a520cf09d8342aca0b046e81f4074882f40ef",
+    "src/CapacityBooking.Domain/HoldDeadline.cs": "e655e92f8048eca693bae06d9ce037f7cf544874cb2e216d2bf98d9513aedd6e",
+    "src/CapacityBooking.Domain/VoyageCapacity.cs": "180018fad9ba1380f3a7a97be23c1756d0fcee7dff8eba28d9caa35e985c2cdb",
+    "src/CapacityBooking.Domain/packages.lock.json": "a29c6aa8cfb81874ff8bb78dc369d7416f28c9b8cc47e99592bfc019b20c41eb",
+    "src/CapacityBooking.Infrastructure/BookingService.cs": "1d725c7a0605ff518e93142114563b06413815495ebbb2d3df4d84cb6f364c23",
+    "src/CapacityBooking.Infrastructure/CapacityBooking.Infrastructure.csproj": "6ae53b0a52aa1c87655df038fdf17286b92b6ded824f9f4d566f3618ed99c9da",
+    "src/CapacityBooking.Infrastructure/Database.cs": "67b8048a8dc6164ec3923a269081c3277882e2eaa35c958dc50ce05f9f4d8a65",
+    "src/CapacityBooking.Infrastructure/ExpiryService.cs": "3c85fcbdfa721e8ad2ed174c87feda5d3570e43b397e5af9b989ea9a202dc468",
+    "src/CapacityBooking.Infrastructure/MigrationRunner.cs": "cfa432f01b9a1160dd8f64d576db7e382938799b85eef9b924461bd5eea22e64",
+    "src/CapacityBooking.Infrastructure/Migrations/001_initial.sql": "9fa5388ba522e85d1a2068d0c3b156ba837a288997419d6c3427c5046aa4caf1",
+    "src/CapacityBooking.Infrastructure/Reliability/BookingConfirmedConsumer.cs": "b67ef92ed5a2ed3419842160627e891fb608342417776cca7fa65f32643d3e5d",
+    "src/CapacityBooking.Infrastructure/Reliability/LocalMessageTransport.cs": "c47d975bc6ebc2b75d62fb4ba17f68c8e23c272e5d665536cb0457cbfa41b330",
+    "src/CapacityBooking.Infrastructure/Reliability/OutboxPublisher.cs": "5b94ef3b15983dad8a02be3b316012cc0d72aef7c1bc10c4bd7f0676b2ec921b",
+    "src/CapacityBooking.Infrastructure/packages.lock.json": "210e84ba0ce825ae945971f4d181147f53cc5ed089564d020fabababb98ec6de",
+    "tests/CapacityBooking.IntegrationTests/BusinessLifecycleTests.cs": "fbcbffefb828f40e5ebca713ebf989894e1b14727b4f53851016b0cfb3e75312",
+    "tests/CapacityBooking.IntegrationTests/CapacityBooking.IntegrationTests.csproj": "d01a0d8b28dba44490b869acd167de35efcf9929d245099275a87a98b4895fa4",
+    "tests/CapacityBooking.IntegrationTests/ConcurrencyTests.cs": "419d40e26bceb1af417b3cfbba41dd0234be9a97172481715182fbff3f54dd67",
+    "tests/CapacityBooking.IntegrationTests/DatabaseFixture.cs": "a8a6e26ec9271bbe98488125b5f34ccfef1f8b5a088a2c3729707212de0a3ae7",
+    "tests/CapacityBooking.IntegrationTests/DatabaseInvariantTests.cs": "7d947128a4d00b5fc8c17aba6ade722acee72ff92c320344622559c5469417f0",
+    "tests/CapacityBooking.IntegrationTests/HttpContractTests.cs": "b46b32245bd91a1c1f794aa6ba6d52cefc3883bdbe8e1f7eadbfc1297edb451d",
+    "tests/CapacityBooking.IntegrationTests/IdempotencyTests.cs": "e67f1d98369462e687a1d0315ccb469f181c4339238d141b13cad28b82d5ceb6",
+    "tests/CapacityBooking.IntegrationTests/ProcessRecoveryTests.cs": "3e49c96282d62168c7ad7f72ec80d4854f3ab7e2e3f9887e203369e1b4bc9464",
+    "tests/CapacityBooking.IntegrationTests/RecoveryTests.cs": "6999c43b172158f5c94236d862fbdc60f814f4f49a8468dbbabd2ae0641c80da",
+    "tests/CapacityBooking.IntegrationTests/TestObserver.cs": "4a02168632822decc1617dab649693f8c786e0f4fb5c078953d1f65ddb3f9d01",
+    "tests/CapacityBooking.IntegrationTests/packages.lock.json": "711c3c92189f0f337b4c8ea8d88a3755bea88d6005e26dd7701f4e7c9da4e3a3",
+    "tests/CapacityBooking.UnitTests/CapacityBooking.UnitTests.csproj": "c4ae73043b96e4c7c857521b62b3d5a2a5c2e571f9c45f727ff72fc6b9b8466d",
+    "tests/CapacityBooking.UnitTests/CapacityDomainTests.cs": "9924c617ca835771f0bf3d6bfc6a0d9c891d928fdaed03670523fc6be00c394c",
+    "tests/CapacityBooking.UnitTests/HoldDeadlineTests.cs": "3c88269b109342543ebe67e37f0de911b8b7000d9860682e1a731274fbb33eba",
+    "tests/CapacityBooking.UnitTests/packages.lock.json": "d55e3e0373d76b102f780d89e9f72ca5e34dae9f00a88ae955157be2db879090"
+  },
+  "additional_checks": {
+    "readme_smoke": "health, seeded availability, create, canonical replay, GET, repeated cancellation",
+    "nuget_audit": "No known vulnerable direct or transitive NuGet packages reported at verification time",
+    "diagrams": "All three Mermaid diagrams rendered to SVG and visually inspected as PNG"
+  },
+  "limits": [
+    "No real broker or broker-failover verification",
+    "No 5000 requests/second throughput benchmark",
+    "No real authentication/payment integration",
+    "Candidate-owned live defense not performed"
+  ]
+}

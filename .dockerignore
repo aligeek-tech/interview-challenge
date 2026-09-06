@@ -1,0 +1,8 @@
+.git
+.local
+.tools
+**/bin
+**/obj
+artifacts
+TestResults
+IMPLEMENTATION_CONTRACT.md

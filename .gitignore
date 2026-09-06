@@ -1,0 +1,10 @@
+.tools/
+.local/
+**/bin/
+**/obj/
+TestResults/
+artifacts/
+.env
+.DS_Store
+*.user
+IMPLEMENTATION_CONTRACT.md

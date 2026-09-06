@@ -1,0 +1,34 @@
+{
+  "version": 1,
+  "dependencies": {
+    "net10.0": {
+      "Dapper": {
+        "type": "Transitive",
+        "resolved": "2.1.66",
+        "contentHash": "/q77jUgDOS+bzkmk3Vy9SiWMaetTw+NOoPAV0xPBsGVAyljd5S6P+4RUW7R3ZUGGr9lDRyPKgAMj2UAOwvqZYw=="
+      },
+      "Npgsql": {
+        "type": "Transitive",
+        "resolved": "10.0.3",
+        "contentHash": "7nb5YzXuvWWJxB0J8DiyL3we+X4FOctZrt0fIBnucOIaIevFEEwGQVZKtiu9olXdlNAK1eNgqSral6r/jlhI4w=="
+      },
+      "capacitybooking.application": {
+        "type": "Project",
+        "dependencies": {
+          "CapacityBooking.Domain": "[1.0.0, )"
+        }
+      },
+      "capacitybooking.domain": {
+        "type": "Project"
+      },
+      "capacitybooking.infrastructure": {
+        "type": "Project",
+        "dependencies": {
+          "CapacityBooking.Application": "[1.0.0, )",
+          "Dapper": "[2.1.66, )",
+          "Npgsql": "[10.0.3, )"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,5 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <ItemGroup>
+    <ProjectReference Include="../CapacityBooking.Infrastructure/CapacityBooking.Infrastructure.csproj" />
+  </ItemGroup>
+</Project>
